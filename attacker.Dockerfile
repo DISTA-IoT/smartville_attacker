@@ -14,15 +14,12 @@ RUN apt-get install -y python3 python3-pip netcat wget\
 RUN     apt-get clean && \
         rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-
 RUN pip3 install --upgrade pip
-
-RUN pip3 install -r requirements.txt
 
 RUN apt-get update && apt-get install -y git && \
         rm -rf /var/lib/apt/lists/*
 
-RUN git clone https://github.com/DISTA-IoT/smartville_attacker.git attacker
+RUN git clone https://github.com/DISTA-IoT/smartville_attacker.git /attacker
 
 WORKDIR /attacker
 
