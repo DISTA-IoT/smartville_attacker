@@ -1,27 +1,16 @@
-FROM ubuntu:focal
+FROM python:3.13.3-slim
 
-RUN     apt-get -y update && \
-        apt-get -y upgrade
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    tcpdump tcpreplay netcat-openbsd wget \
+    net-tools iputils-ping git build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
-# dependencies of TCP Replay
-RUN     apt-get -y --force-yes install \
-        wget curl build-essential tcpdump tcpreplay
 
-RUN apt-get install -y python3 python3-pip netcat wget\
-    net-tools iputils-ping  tcpdump && \
-    rm -rf /var/lib/apt/lists/*
-
-RUN     apt-get clean && \
-        rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-
-RUN pip3 install --upgrade pip
-
-RUN apt-get update && apt-get install -y git && \
-        rm -rf /var/lib/apt/lists/*
-
+# Clone the repo
 RUN git clone https://github.com/DISTA-IoT/smartville_attacker.git /attacker
 
 WORKDIR /attacker
 
-RUN pip install -r requirements.txt
-
+# Install Python dependencies
+RUN pip install --upgrade pip && pip install -r requirements.txt
