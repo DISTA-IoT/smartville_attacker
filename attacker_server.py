@@ -39,12 +39,12 @@ IFACE_NAME = 'eth0'
 PATTERN_TO_REPLAY = None
 PREPROCESSED = None
 
-stop_flag = False
+stop_flag = True
 stop_flag_lock = Lock()
 current_replay_process: Optional[subprocess.Popen] = None
 replay_thread = None
 checker_thread = None
-
+rewriting = False
 
 logger = logging.getLogger("attacker_server")
 # Configure logging
@@ -109,18 +109,20 @@ def modify_and_save_pcap(input_pcap_file, output_pcap_file):
 
 
 def resend_pcap_with_modification_tcpreplay():
-    global current_replay_process, stop_flag
+    global current_replay_process, stop_flag, rewriting
     
     original_pcap_file = os.path.join(f"{PATTERN_TO_REPLAY}/{PATTERN_TO_REPLAY}.pcap")
     file_to_replay = f"{PATTERN_TO_REPLAY}/{PATTERN_TO_REPLAY}-from{SOURCE_IP}to{TARGET_IP}.pcap"
-            
+    rewriting = False
+
     if not os.path.exists(file_to_replay):
-        print(f'FILE NOT FOUND: {file_to_replay}')
-        print("Rewriting pattern with new addressses...")
+        logger.info(f'FILE NOT FOUND: {file_to_replay}. Will rewrite pattern with new addresses first...')
         # Modify and send packets using tcpreplay
+        rewriting = True
         modify_and_save_pcap(original_pcap_file, file_to_replay)
+        rewriting = False
     else:
-        print(f'REWRITEN {PATTERN_TO_REPLAY} PATTERN FOUND from {SOURCE_IP} to {TARGET_IP}')
+        logger.info(f'REWRITEN {PATTERN_TO_REPLAY} PATTERN FOUND from {SOURCE_IP} to {TARGET_IP}')
 
     print('sending...')
     # Tcpreplay command to send the modified packets
@@ -197,6 +199,10 @@ async def start_replay(kwargs: dict):
     global PATTERN_TO_REPLAY, TARGET_IP, SOURCE_IP, SOURCE_MAC, stop_flag
     global replay_thread, checker_thread
     logger.info("Replay endpoint called")
+
+    if not stop_flag:
+        logger.info("Replay already in progress.")
+        return {"message": "Replay already in progress."}
     
     PATTERN_TO_REPLAY = kwargs.get('pattern', None)
     TARGET_IP = kwargs.get('dest_ip', None)
@@ -210,11 +216,21 @@ async def start_replay(kwargs: dict):
     logger.debug(f'Target IP {TARGET_IP}')
     logger.debug(f'Pattern to replay: {PATTERN_TO_REPLAY}')
 
-    stop_flag = False
+    with stop_flag_lock:
+        stop_flag = False
     
     replay_thread, checker_thread = start_replay_with_monitor()  # Execute the function immediately
 
     return {"status": "Replay started", "pattern": PATTERN_TO_REPLAY, "target": TARGET_IP}
+
+
+@app.get("/replay_status")
+async def get_replay_status():
+    logger.info("Replay status endpoint called")
+    if current_replay_process is None:
+        return {"status": "stopped"}
+    else:
+        return {"status": "running"}
 
 
 @app.post("/stop")
@@ -224,6 +240,9 @@ async def stop_replay_endpoint():
     if stop_flag:
         logger.info("Replay already stopped.")
         return {"message": "Replay already stopped."}
+    if rewriting:
+        logger.info("Replay is currently rewriting the pcap file. Please wait.")
+        return {"message": "Replay is currently rewriting the pcap file. Please wait."}
     with stop_flag_lock:
         stop_flag = True
     if replay_thread:
