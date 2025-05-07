@@ -26,6 +26,9 @@ import netifaces as ni
 from scapy.all import IP
 import threading
 from tqdm import tqdm
+import atexit
+import signal
+
 
 # Global variables for process management
 SOURCE_IP = None
@@ -52,6 +55,20 @@ logging.basicConfig(
 )
 
 app = FastAPI(title="Attacker Server API", description="API for simulating attacks")
+
+
+def cleanup():
+    global stop_flag, current_replay_process
+    logger.info("Cleaning up before exit")
+    stop_flag = True
+    if current_replay_process is not None:
+        os.killpg(os.getpgid(current_replay_process.pid), 15)
+        current_replay_process = None
+
+
+def handle_sigterm(signum, frame):
+    cleanup()
+    os._exit(0)  # Force exit
 
 
 def get_static_source_ip_address(interface=IFACE_NAME):
@@ -132,8 +149,12 @@ def start_replay_with_monitor():
     """Starts the replay function and the monitor in separate threads"""
    
     # Create and start threads
-    replay_thread = threading.Thread(target=resend_pcap_with_modification_tcpreplay)
-    checker_thread = threading.Thread(target=process_checker)
+    replay_thread = threading.Thread(
+        target=resend_pcap_with_modification_tcpreplay,
+        daemon=True)
+    checker_thread = threading.Thread(
+        target=process_checker,
+        daemon=True)
     
     replay_thread.start()
     checker_thread.start()
@@ -192,7 +213,7 @@ async def start_replay(kwargs: dict):
     return {"status": "Replay started", "pattern": PATTERN_TO_REPLAY, "target": TARGET_IP}
 
 
-@app.get("/stop")
+@app.post("/stop")
 async def stop_replay_endpoint():
     global stop_flag, replay_thread, checker_thread
     logger.info("Stop replay endpoint called")
@@ -204,8 +225,15 @@ async def stop_replay_endpoint():
     return {"message": "Replay stopped."}
 
 
+
 if __name__ == "__main__":
     logger.info("Starting FastAPI server")
+
+    atexit.register(cleanup)
+    signal.signal(signal.SIGTERM, handle_sigterm)
+    signal.signal(signal.SIGINT, handle_sigterm)
+    
     uvicorn.run(app, host="0.0.0.0", port=8000)
+    
 
 
