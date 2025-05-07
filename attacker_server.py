@@ -222,6 +222,7 @@ async def stop_replay_endpoint():
         replay_thread.join()
     if checker_thread:
         checker_thread.join()
+    logger.info("Replay stopped.")
     return {"message": "Replay stopped."}
 
 
