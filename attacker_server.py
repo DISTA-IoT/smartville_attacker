@@ -194,13 +194,12 @@ async def health_check():
 
 @app.post("/replay")
 async def start_replay(kwargs: dict):
-    global PATTERN_TO_REPLAY, TARGET_IP, REPEAT_PATTERN_SECS, SOURCE_IP, SOURCE_MAC, stop_flag
+    global PATTERN_TO_REPLAY, TARGET_IP, SOURCE_IP, SOURCE_MAC, stop_flag
     global replay_thread, checker_thread
     logger.info("Replay endpoint called")
     
-    PATTERN_TO_REPLAY = kwargs.get('PATTERN_TO_REPLAY', None)
-    TARGET_IP = kwargs.get('TARGET_IP', None)
-    REPEAT_PATTERN_SECS = kwargs.get('REPEAT_PATTERN_SECS', 5)
+    PATTERN_TO_REPLAY = kwargs.get('pattern', None)
+    TARGET_IP = kwargs.get('dest_ip', None)
 
     # Your new source IP
     SOURCE_IP = get_static_source_ip_address()
@@ -210,7 +209,6 @@ async def start_replay(kwargs: dict):
     logger.debug(f'Source MAC {SOURCE_MAC}')
     logger.debug(f'Target IP {TARGET_IP}')
     logger.debug(f'Pattern to replay: {PATTERN_TO_REPLAY}')
-    logger.debug(f'Interval between replays: {REPEAT_PATTERN_SECS}')
 
     stop_flag = False
     
