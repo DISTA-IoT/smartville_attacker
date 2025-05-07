@@ -221,16 +221,16 @@ async def start_replay(kwargs: dict):
     
     replay_thread, checker_thread = start_replay_with_monitor()  # Execute the function immediately
 
-    return {"status": "Replay started", "pattern": PATTERN_TO_REPLAY, "target": TARGET_IP}
+    return {"message": f"Replay started pattern {PATTERN_TO_REPLAY} target {TARGET_IP}"}
 
 
 @app.get("/replay_status")
 async def get_replay_status():
     logger.info("Replay status endpoint called")
     if current_replay_process is None:
-        return {"status": "stopped"}
+        return {"message": "Replay not running"}
     else:
-        return {"status": "running"}
+        return {"message": "Replay running"}
 
 
 @app.post("/stop")
