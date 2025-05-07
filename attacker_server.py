@@ -28,6 +28,7 @@ import threading
 from tqdm import tqdm
 import atexit
 import signal
+from threading import Lock
 
 
 # Global variables for process management
@@ -37,7 +38,9 @@ TARGET_IP = None
 IFACE_NAME = 'eth0'
 PATTERN_TO_REPLAY = None
 PREPROCESSED = None
+
 stop_flag = False
+stop_flag_lock = Lock()
 current_replay_process: Optional[subprocess.Popen] = None
 replay_thread = None
 checker_thread = None
@@ -60,7 +63,8 @@ app = FastAPI(title="Attacker Server API", description="API for simulating attac
 def cleanup():
     global stop_flag, current_replay_process
     logger.info("Cleaning up before exit")
-    stop_flag = True
+    with stop_flag_lock:
+        stop_flag = True
     if current_replay_process is not None:
         os.killpg(os.getpgid(current_replay_process.pid), 15)
         current_replay_process = None
@@ -122,12 +126,14 @@ def resend_pcap_with_modification_tcpreplay():
     # Tcpreplay command to send the modified packets
     cmd = f"tcpreplay -i {IFACE_NAME} --stats 3 {file_to_replay}"
     
-    # Use Popen instead of run to have more control over the process
-    current_replay_process = subprocess.Popen(cmd, shell=True, preexec_fn=os.setsid)
-    current_replay_process.wait()  # Wait for process to complete
-    current_replay_process = None  # Clear when done
-    stop_flag = True  # Set stop flag to true when done
-    logger.info("Replay process completed.")
+    while not stop_flag:
+        # Use Popen instead of run to have more control over the process
+        current_replay_process = subprocess.Popen(cmd, shell=True, preexec_fn=os.setsid)
+        current_replay_process.wait()  # Wait for process to complete
+        current_replay_process = None  # Clear when done
+
+        logger.info("Replay process completed or terminated from api.")
+        if not stop_flag: logging.info("Recommencing replay.")
 
 
 def process_checker():
@@ -217,7 +223,11 @@ async def start_replay(kwargs: dict):
 async def stop_replay_endpoint():
     global stop_flag, replay_thread, checker_thread
     logger.info("Stop replay endpoint called")
-    stop_flag = True
+    if stop_flag:
+        logger.info("Replay already stopped.")
+        return {"message": "Replay already stopped."}
+    with stop_flag_lock:
+        stop_flag = True
     if replay_thread:
         replay_thread.join()
     if checker_thread:
