@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y \
 
 
 # Clone the repo
-RUN git clone -b new_smartvillehttps://github.com/DISTA-IoT/smartville_attacker.git /attacker
+RUN git clone -b new_smartville https://github.com/DISTA-IoT/smartville_attacker.git /attacker
 
 WORKDIR /attacker
 
