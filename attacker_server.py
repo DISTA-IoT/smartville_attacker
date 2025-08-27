@@ -25,11 +25,13 @@ from scapy.all import *
 import netifaces as ni
 from scapy.all import IP
 import threading
-from tqdm import tqdm
 import atexit
 import signal
 from threading import Lock
 import shlex
+from health_monitor import HealthMonitor
+
+
 
 # Global variables for process management
 SOURCE_IP = None
@@ -39,7 +41,14 @@ IFACE_NAME = 'eth0'
 PATTERN_TO_REPLAY = None
 PREPROCESSED = None
 SPEED_MULTIPLIER = None
+HEALTH_MONITORING = None
+KAFKA_ENDPOINT = None
 
+
+
+health_monitor = None
+kafka_msg_producer = None
+healt_probes_count = 0
 stop_flag = True
 stop_flag_lock = Lock()
 current_replay_process: Optional[subprocess.Popen] = None
@@ -145,7 +154,7 @@ def resend_pcap_with_modification_tcpreplay():
     rewrite_and_send(original_pcap_file,file_to_replay)
 
 
-\
+
 def rewrite_and_send(original_pcap_file, file_to_replay):
     global rewriting, current_replay_process, stop_flag
     rewriting = False
@@ -205,6 +214,16 @@ def start_replay_with_monitor():
     return replay_thread, checker_thread
 
 
+def health_probes_thread(args):
+    global stop_flag, health_monitor
+
+    logger.info(f"Starting health probes thread for node: {SOURCE_IP}")
+
+    while not stop_flag:
+        health_monitor.probe_and_send()
+        time.sleep(args.probe_frequency_seconds)
+
+
 @app.get("/")
 async def root():
     logger.info("Root endpoint called")
@@ -231,29 +250,38 @@ async def health_check():
 
 @app.post("/replay")
 async def start_replay(kwargs: dict):
-    global PATTERN_TO_REPLAY, TARGET_IP, SOURCE_IP, SOURCE_MAC, SPEED_MULTIPLIER, stop_flag
-    global replay_thread, checker_thread
+    global PATTERN_TO_REPLAY, TARGET_IP, SOURCE_IP, SOURCE_MAC, SPEED_MULTIPLIER, stop_flag, HEALTH_MONITORING
+    global kafka_msg_producer, replay_thread, checker_thread, health_monitor
     logger.info("Replay endpoint called")
 
     
-    
+    HEALTH_MONITORING = kwargs.get('node_features', False)
+    KAFKA_ENDPOINT = kwargs.get('kafka_endpoint', None)
     PATTERN_TO_REPLAY = kwargs.get('pattern', None)
     TARGET_IP = kwargs.get('dest_ip', None)
+    SOURCE_IP = get_static_source_ip_address()
+    SOURCE_MAC = get_source_mac()
+    SPEED_MULTIPLIER = kwargs.get('speed_multiplier')
+
+    if HEALTH_MONITORING:
+        health_params = kwargs.get('health_params', {})
+        health_params['host_ip'] = SOURCE_IP
+        health_params['logger'] = logger
+        health_params['bootstrap_server'] = KAFKA_ENDPOINT
+        health_monitor = HealthMonitor(health_params)
 
     if not stop_flag:
         logger.info("Replay already in progress.")
         return {"message": f"Already processing {PATTERN_TO_REPLAY}"}
 
-    # Your new source IP
-    SOURCE_IP = get_static_source_ip_address()
-    SOURCE_MAC = get_source_mac()
-    SPEED_MULTIPLIER = kwargs.get('speed_multiplier')
+    
 
     logger.info(f'Source IP {SOURCE_IP}')
     logger.info(f'Source MAC {SOURCE_MAC}')
     logger.info(f'Target IP {TARGET_IP}')
     logger.info(f'Pattern to replay: {PATTERN_TO_REPLAY}')
     logger.info(f'Speed Multiplier: {SPEED_MULTIPLIER}')
+
 
     with stop_flag_lock:
         stop_flag = False
