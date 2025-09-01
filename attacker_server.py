@@ -57,7 +57,7 @@ checker_thread = None
 health_thread = None
 rewriting = False
 
-logger = logging.getLogger("attacker_server")
+logger = logging.getLogger("traffic_server")
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -68,7 +68,7 @@ logging.basicConfig(
     ]
 )
 
-app = FastAPI(title="Attacker Server API", description="API for simulating attacks")
+app = FastAPI(title="Traffic Server API", description="API for simulating traffic")
 
 
 def cleanup():
@@ -160,10 +160,18 @@ def modify_and_save_pcap(input_pcap_file, output_pcap_file):
 def resend_pcap_with_modification_tcpreplay():
     global stop_flag
 
+    if PATTERN_TO_REPLAY == 'doorlock':
+        for i in range(1,4):
+            original_pcap_file = os.path.join(f"{PATTERN_TO_REPLAY}/{PATTERN_TO_REPLAY}_{i}.pcap")
+            file_to_replay = f"{PATTERN_TO_REPLAY}/{PATTERN_TO_REPLAY}_{i}-from{SOURCE_IP}to{TARGET_IP}.pcap"
+            if not stop_flag:
+                rewrite_and_send(original_pcap_file,file_to_replay)
 
-    original_pcap_file = os.path.join(f"{PATTERN_TO_REPLAY}/{PATTERN_TO_REPLAY}.pcap")
-    file_to_replay = f"{PATTERN_TO_REPLAY}/{PATTERN_TO_REPLAY}-from{SOURCE_IP}to{TARGET_IP}.pcap"
-    rewrite_and_send(original_pcap_file,file_to_replay)
+    else:
+
+        original_pcap_file = os.path.join(f"{PATTERN_TO_REPLAY}/{PATTERN_TO_REPLAY}.pcap")
+        file_to_replay = f"{PATTERN_TO_REPLAY}/{PATTERN_TO_REPLAY}-from{SOURCE_IP}to{TARGET_IP}.pcap"
+        rewrite_and_send(original_pcap_file,file_to_replay)
 
 
 def rewrite_and_send(original_pcap_file, file_to_replay):
@@ -346,7 +354,7 @@ async def stop_replay_endpoint():
 
 
 if __name__ == "__main__":
-    logger.info("Starting FastAPI server")
+    logger.info("Starting Traffic server")
 
     atexit.register(cleanup)
     signal.signal(signal.SIGTERM, handle_sigterm)
