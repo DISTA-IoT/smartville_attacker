@@ -13,4 +13,8 @@ RUN git clone -b new_smartville https://github.com/DISTA-IoT/smartville_attacker
 WORKDIR /attacker
 
 # Install Python dependencies
-RUN pip install --upgrade pip && pip install -r requirements.txt
+RUN pip install --upgrade pip 
+
+RUN pip install uv
+
+RUN uv  pip sync --system requirements.txt
