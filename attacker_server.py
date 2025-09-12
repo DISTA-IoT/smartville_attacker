@@ -216,9 +216,10 @@ def process_checker():
         logger.info("Replay process stopped.")
 
 
-def start_replay_with_monitor():
+def start_replaying_threads():
     """Starts the replay function and the monitor in separate threads"""
-   
+    health_thread = None
+
     # Create and start threads
     replay_thread = threading.Thread(
         target=resend_pcap_with_modification_tcpreplay,
@@ -226,14 +227,18 @@ def start_replay_with_monitor():
     checker_thread = threading.Thread(
         target=process_checker,
         daemon=True)
-    health_thread = threading.Thread(
-        target=health_probes_thread,
-        daemon=True
-    )
-
+    
     replay_thread.start()
     checker_thread.start()
-    health_thread.start()
+
+
+    if HEALTH_MONITORING:
+        health_thread = threading.Thread(
+            target=health_probes_thread,
+            daemon=True
+        )
+
+        health_thread.start()
     
     return replay_thread, checker_thread, health_thread
 
@@ -251,30 +256,6 @@ def health_probes_thread():
         time.sleep(HEALTH_PROBE_FREQUENCY)
     health_monitor.release_producer()
 
-
-
-@app.get("/")
-async def root():
-    logger.info("Root endpoint called")
-    return {"message": "Hello World"}
-
-
-@app.get("/items/{item_id}")
-async def read_item(item_id: int):
-    logger.info(f"Item requested with id: {item_id}")
-    return {"item_id": item_id, "timestamp": datetime.now().isoformat()}
-
-
-@app.post("/items/")
-async def create_item(item: dict):
-    logger.info(f"Creating new item: {item}")
-    return {"item": item, "created": True}
-
-
-@app.get("/health")
-async def health_check():
-    logger.debug("Health check endpoint called")
-    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 
 @app.post("/replay")
@@ -316,7 +297,7 @@ async def start_replay(kwargs: dict):
     with stop_flag_lock:
         stop_flag = False
     
-    replay_thread, checker_thread, health_thread = start_replay_with_monitor()  # Execute the function immediately
+    replay_thread, checker_thread, health_thread = start_replaying_threads()  # Execute the function immediately
 
     return {"message": f"Started replaying {PATTERN_TO_REPLAY} to {TARGET_IP}"}
 
@@ -354,7 +335,7 @@ async def stop_replay_endpoint():
 
 
 if __name__ == "__main__":
-    logger.info("Starting Traffic server")
+    logger.info("Starting Attacker FastAPI server")
 
     atexit.register(cleanup)
     signal.signal(signal.SIGTERM, handle_sigterm)
