@@ -253,7 +253,8 @@ def health_probes_thread():
             health_monitor.probe_and_send()
         else:
             logger.warning("Health monitor is not initialized. Skipping health probe.")
-        time.sleep(HEALTH_PROBE_FREQUENCY)
+        # Use event.wait so a stop() call unblocks this immediately
+        health_monitor._stop_event.wait(HEALTH_PROBE_FREQUENCY)
     health_monitor.release_producer()
 
 
@@ -324,6 +325,8 @@ async def stop_replay_endpoint():
         return {"message": "Replay is currently rewriting the pcap file. Please wait."}
     with stop_flag_lock:
         stop_flag = True
+    if health_monitor and HEALTH_MONITORING:
+        health_monitor.stop()  # unblocks _stop_event.wait() immediately
     if replay_thread:
         replay_thread.join()
     if checker_thread:
@@ -349,6 +352,3 @@ if __name__ == "__main__":
         assert False
 
     uvicorn.run(app, host="0.0.0.0", port=port)
-    
-
-
