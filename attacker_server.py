@@ -80,6 +80,9 @@ def cleanup():
     if current_replay_process is not None:
         os.killpg(os.getpgid(current_replay_process.pid), 15)
         current_replay_process = None
+    if 'health_monitor' in globals() and health_monitor is not None:
+        health_monitor.stop()
+        health_monitor.cleanup_kafka()
         
 
 def handle_sigterm(signum, frame):
@@ -255,7 +258,7 @@ def health_probes_thread():
             logger.warning("Health monitor is not initialized. Skipping health probe.")
         # Use event.wait so a stop() call unblocks this immediately
         health_monitor._stop_event.wait(HEALTH_PROBE_FREQUENCY)
-    health_monitor.release_producer()
+    health_monitor.cleanup_kafka()   # this does flush + topic deletion
 
 
 
@@ -327,6 +330,7 @@ async def stop_replay_endpoint():
         stop_flag = True
     if health_monitor and HEALTH_MONITORING:
         health_monitor.stop()  # unblocks _stop_event.wait() immediately
+        health_monitor.cleanup_kafka()  # belt-and-suspenders in case thread crashed
     if replay_thread:
         replay_thread.join()
     if checker_thread:
