@@ -19,7 +19,6 @@
 import logging
 from fastapi import FastAPI
 import uvicorn
-from datetime import datetime
 import os
 from scapy.all import *
 import netifaces as ni
@@ -276,6 +275,11 @@ async def start_replay(kwargs: dict):
     SOURCE_IP = get_static_source_ip_address()
     SOURCE_MAC = get_source_mac()
     SPEED_MULTIPLIER = kwargs.get('speed_multiplier')
+
+    if 'internal_ips' in kwargs:
+        internal_ips = kwargs['internal_ips']
+        if internal_ips:
+            os.environ['no_proxy'] = ','.join(internal_ips)
 
     if HEALTH_MONITORING:
         health_params = kwargs.get('health_params', {})
